@@ -22,6 +22,7 @@ import { registerLayer, patchLongPress, layerActive } from "./layer.js";
 import { registerRoseMenu } from "./roseconfig.js";
 import { injectSceneConfig } from "./sceneconfig.js";
 import { registerGroupActions, handleActorDrop } from "./groups.js";
+import { hookWebpUpload } from "./webp.js";
 Hooks.on("dropCanvasData", (cv, data, event) => handleActorDrop(cv, data, event));
 
 
@@ -92,6 +93,9 @@ Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "lore12", { scope: "world", config: false, type: Boolean, default: false });
   game.settings.register(MODULE_ID, "lore13", { scope: "world", config: false, type: Boolean, default: false });
   game.settings.register(MODULE_ID, "lore14", { scope: "world", config: false, type: Boolean, default: false });
+  game.settings.register(MODULE_ID, "webpUpload", { name: "Converter imagens para WebP ao enviar", hint: "PNG, JPEG, BMP e TIFF enviados ao Foundry (pelo seletor de arquivos ou arrastando) sobem já convertidos para WebP, que fica de 5 a 10 vezes mais leve e carrega mais rápido. A transparência é mantida. Se o WebP não ficar menor, sobe o original.", scope: "world", config: true, type: Boolean, default: true });
+  game.settings.register(MODULE_ID, "webpQuality", { name: "Qualidade do WebP", hint: "De 0,5 a 1. O padrão 0,86 é praticamente igual ao original.", scope: "world", config: true, type: Number, range: { min: 0.5, max: 1, step: 0.01 }, default: 0.86 });
+  try { hookWebpUpload(); } catch (e) { console.warn(`${MODULE_ID} | WebP`, e); }
   game.settings.register(MODULE_ID, "popoutBtn", { name: "Destacar janelas", hint: "Põe o botão de destacar nas janelas antigas de módulos que ainda não têm (as janelas novas do Foundry 14 já trazem \"Destacar\" no menu ⋮ do título). Os painéis do Atlas e do Cronos têm o botão sempre.", scope: "client", config: true, type: Boolean, default: true });
   hookAppPopout(() => { try { return game.settings.get(MODULE_ID, "popoutBtn"); } catch (e) { return true; } }); });
 
@@ -424,3 +428,4 @@ document.addEventListener("click", (e) => {
   for (const i of row.querySelectorAll("input")) i.value = def;
   rng.dispatchEvent(new Event("input", { bubbles: true })); rng.dispatchEvent(new Event("change", { bubbles: true }));
 }, true);
+Hooks.once("ready", () => { try { hookWebpUpload(); } catch (e) { /* */ } });
