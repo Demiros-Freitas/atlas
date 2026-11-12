@@ -682,6 +682,8 @@ function terrainize(scene, g, from, goal, goalNode) {
 function gridLegOf(g, e, fromName, toName) {
   const { F, to, rev, fordPx, label } = e.grid; const pts = gPath(g.cgrid ?? g.tgrid, F, to, fordPx); if (!pts) return null;
   const leg = gridLeg(g, g.tgrid, rev ? [...pts].reverse() : pts, fordPx, label, fromName, toName);
+  // o desenho suavizado pode raspar numa casa fechada da grade: o tempo fica o que a grade calculou (nunca infinito)
+  if (!Number.isFinite(leg.hours)) { leg.hours = Number.isFinite(e.hours) ? e.hours : leg.units * g.sc.mi / Math.max(0.1, speedFor(g.tr, leg.use, g.pace)); leg.blocked = false; }
   const crooked = polyLength(leg.pts) > dist(leg.pts[0], leg.pts[leg.pts.length - 1]) * 1.03;
   if (crooked && label === "Fora de estrada") leg.name = "Fora de estrada (contornando o terreno)";
   return leg;
@@ -797,10 +799,10 @@ export function positionAt(plan, h) {
 }
 function daysOf(plan, zones) {
   const HPD = plan.hpd || HOURS_PER_DAY;
-  const out = []; const T = plan.totalHours;
+  const out = []; const T = plan.totalHours; if (!Number.isFinite(T) || T < 0) return out; // sem tempo válido, sem dias (evita laço sem fim)
   // paradas: as escolhidas pelo grupo (plan.stops, em horas de marcha) ou a sugestão automática (a cada dia de marcha)
   const ends = Array.isArray(plan.stops) ? [...new Set(plan.stops.filter(h => h > 0.25 && h < T - 0.25).map(h => Math.round(h * 100) / 100))].sort((a, b) => a - b).concat([T])
-    : (() => { const first = Math.max(0.5, HPD - (plan.todayStart || 0)); const out = []; let e = first; while (e < T - 0.5) { out.push(e); e += HPD; } out.push(T); return out; })();
+    : (() => { const first = Math.max(0.5, HPD - (plan.todayStart || 0)); const out = []; let e = first; while (e < T - 0.5 && out.length < 2000) { out.push(e); e += HPD; } out.push(T); return out; })();
   const n = ends.length;
   for (let d = 1; d <= n; d++) {
     const last = d === n; const end = ends[d - 1]; const start = d > 1 ? ends[d - 2] : 0; const pos = positionAt(plan, end);

@@ -88,6 +88,10 @@ Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "lore8", { scope: "world", config: false, type: Boolean, default: false });
   game.settings.register(MODULE_ID, "lore9", { scope: "world", config: false, type: Boolean, default: false });
   game.settings.register(MODULE_ID, "lore10", { scope: "world", config: false, type: Boolean, default: false });
+  game.settings.register(MODULE_ID, "lore11", { scope: "world", config: false, type: Boolean, default: false });
+  game.settings.register(MODULE_ID, "lore12", { scope: "world", config: false, type: Boolean, default: false });
+  game.settings.register(MODULE_ID, "lore13", { scope: "world", config: false, type: Boolean, default: false });
+  game.settings.register(MODULE_ID, "lore14", { scope: "world", config: false, type: Boolean, default: false });
   game.settings.register(MODULE_ID, "popoutBtn", { name: "Destacar janelas", hint: "Põe o botão de destacar nas janelas antigas de módulos que ainda não têm (as janelas novas do Foundry 14 já trazem \"Destacar\" no menu ⋮ do título). Os painéis do Atlas e do Cronos têm o botão sempre.", scope: "client", config: true, type: Boolean, default: true });
   hookAppPopout(() => { try { return game.settings.get(MODULE_ID, "popoutBtn"); } catch (e) { return true; } }); });
 
@@ -169,6 +173,50 @@ Hooks.once("ready", async () => {
     let n = 0; for (const s of game.scenes) { if (!mapOf(s)) continue; try { n += await splitSeamRoutes(s); } catch (e) { console.warn(`${MODULE_ID} | costuras`, e); } }
     if (n) globalThis.ui?.notifications?.info(`Atlas · ${n} rota(s) que davam a volta ao mundo agora param na borda e continuam do outro lado.`);
   } catch (e) { console.warn(`${MODULE_ID} | costuras`, e); }
+});
+/* Brumas: nomes atualizados da campanha (Fazenda das Três Várzeas, Monastério Abandonado, Umbravale, Matthew encapuzado) em diários, compêndios do mundo, cenas e mapas. */
+const loreFx = (build) => {
+  const L = "(@UUID\\[[^\\]]+\\]\\{)?"; const R = [];
+  const art = (old, nu, pairs) => { for (const [a, b] of pairs) R.push([new RegExp(`(^|[^\\p{L}])${a} ${L}${old}`, "gu"), (m, pre, link) => `${pre}${b} ${link ?? ""}${nu}`]); R.push([new RegExp(old, "g"), nu]); };
+  build(art, R);
+  return (t) => { if (typeof t !== "string" || !t) return t; let o = t; for (const [re, to] of R) o = o.replace(re, to); return o; };
+};
+const M2F = [["do", "da"], ["Do", "Da"], ["no", "na"], ["No", "Na"], ["ao", "à"], ["Ao", "À"], ["pelo", "pela"], ["Pelo", "Pela"], ["o", "a"], ["O", "A"]];
+const LORE = {
+  lore11: loreFx((art, R) => {
+    art("Campos de Algodão", "Fazenda das Três Várzeas", [["dos", "da"], ["Dos", "Da"], ["nos", "na"], ["Nos", "Na"], ["aos", "à"], ["Aos", "À"], ["pelos", "pela"], ["Pelos", "Pela"], ["os", "a"], ["Os", "A"]]);
+    art("Capela Abandonada", "Monastério Abandonado", [["da", "do"], ["Da", "Do"], ["na", "no"], ["Na", "No"], ["à", "ao"], ["À", "Ao"], ["pela", "pelo"], ["Pela", "Pelo"], ["a", "o"], ["A", "O"]]);
+    R.push([/Valelumbra/g, "Umbravale"]);
+    R.push([/um homem magro de casaco negro/g, "um homem magro e encapuzado, o rosto na sombra do capuz,"]);
+  }),
+  lore12: loreFx((art) => { art("Acampamento Troll", "Grota dos Trolls", M2F); art("Acampamento dos Trolls", "Grota dos Trolls", M2F); }),
+  // o império de Aether passa a ser sempre "Antigo Império" (textos do Império Githyank, de outra campanha, ficam como estão)
+  // imagens dos locais em WebP (bem mais leves que os PNG originais)
+  lore14: loreFx((art, R) => { R.push([/(assets\/locais\/[^"'<>()]+?)\.png/g, "$1.webp"]); }),
+  lore13: ((f) => (t) => (typeof t === "string" && /Githyank/.test(t)) ? t : f(t))(loreFx((art, R) => { R.push([/(?<![Aa]ntigo )Império(?! Githyank)/g, "Antigo Império"]); })),
+};
+/* Brumas: nomes atualizados da campanha em diários, compêndios do mundo, atores, cenas e mapas (uma vez por mundo). */
+Hooks.once("ready", async () => { if (game.world?.id !== "brumas-recomeco" || !isActiveGM()) return; await new Promise(r => setTimeout(r, 12000));
+ for (const key of Object.keys(LORE)) {
+  try { if (game.settings.get(MODULE_ID, key)) continue; const fx = LORE[key]; let n = 0;
+    const fixJournal = async (j) => {
+      const up = j.pages.contents.map(p => { const c = p.text?.content; const nc = fx(c), nn = fx(p.name); return (nc !== c || nn !== p.name) ? { _id: p.id, name: nn, ...(nc !== c ? { "text.content": nc } : {}) } : null; }).filter(Boolean);
+      if (up.length) { await j.updateEmbeddedDocuments("JournalEntryPage", up); n += up.length; }
+      const nn = fx(j.name); if (nn !== j.name) { await j.update({ name: nn }); n++; } };
+    for (const j of game.journal) await fixJournal(j);
+    for (const pack of game.packs.filter(p => p.metadata.packageType === "world" && p.documentName === "JournalEntry")) {
+      const was = pack.locked; if (was) await pack.configure({ locked: false });
+      try { for (const j of await pack.getDocuments()) await fixJournal(j); } finally { if (was) await pack.configure({ locked: true }); } }
+    for (const a of game.actors) { const b = a.system?.details?.biography?.value; const nb = fx(b); if (nb !== b) { await a.update({ "system.details.biography.value": nb }); n++; } }
+    for (const sc of game.scenes) { const u = {}; const nm = fx(sc.name), nv = fx(sc.navName);
+      if (nm !== sc.name) u.name = nm; if (nv !== sc.navName) u.navName = nv;
+      const F = sc.flags?.[MODULE_ID]; if (F) for (const k of ["pois", "routes", "labels"]) { if (!Array.isArray(F[k])) continue; const js = JSON.stringify(F[k]); const nj = fx(js); if (nj !== js) u[`flags.${MODULE_ID}.${k}`] = JSON.parse(nj); }
+      if (Object.keys(u).length) { await sc.update(u); n++; } }
+    await game.settings.set(MODULE_ID, key, true);
+    console.log(`${MODULE_ID} | ${key}: ${n} documentos atualizados`);
+    if (n) globalThis.ui?.notifications?.info(`Atlas · nomes da campanha atualizados em ${n} lugares.`);
+  } catch (e) { console.warn(`${MODULE_ID} | ${key}`, e); }
+ }
 });
 /* Portais: as rotas de portal antigas viram linhas retas entre portais; círculos da mesma rede ficam ligados entre si. */
 Hooks.once("ready", async () => {

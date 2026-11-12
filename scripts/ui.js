@@ -392,8 +392,8 @@ class AtlasUI {
     this.host.style.cssText = "position:fixed;inset:0;pointer-events:none;";
     if (v?.parentElement) v.after(this.host); else document.body.appendChild(this.host);
     this.sh = this.host.attachShadow({ mode: "open" });
-    this.sh.innerHTML = `<link rel="stylesheet" href="${CSS_URL}"><div class="atlas"><div class="maplayer"></div></div>`;
-    this.mapEl = this.sh.querySelector(".maplayer");
+    this.sh.innerHTML = `<link rel="stylesheet" href="${CSS_URL}"><div class="atlas"><div class="maplayer"></div><div class="hclayer"></div></div>`;
+    this.mapEl = this.sh.querySelector(".maplayer"); this.hcEl = this.sh.querySelector(".hclayer"); this.hcKey = null;
     // camada própria para a rosa (acima do mapa, abaixo da interface do Foundry)
     this.#ensureHud();
     this.sh.addEventListener("click", (e) => this.#onClick(e));
@@ -472,7 +472,7 @@ class AtlasUI {
     if (!this.ensure()) return;
     const sc = this.scene; const m = mapOf(sc);
     this.#ensureHud();
-    if (!this.open || !sc || !m || !this.view) { if (this.hudEl) this.hudEl.innerHTML = ""; this.mapEl.innerHTML = ""; this.mapEl.classList.remove("capture"); try { renderWeatherFx(this, this.sh.querySelector(".atlas")); } catch (e) { /* */ } return; }
+    if (!this.open || !sc || !m || !this.view) { if (this.hudEl) this.hudEl.innerHTML = ""; this.mapEl.innerHTML = ""; this.#placeHover(null); this.mapEl.classList.remove("capture"); try { renderWeatherFx(this, this.sh.querySelector(".atlas")); } catch (e) { /* */ } return; }
     const gm = this.gmView; const L = this.layers; const d = dataOf(sc); const z = this.zoom; const W = window.innerWidth, H = window.innerHeight;
     const svg = []; const defs = []; const html = []; const hud = []; const late = []; // late: marcas do caminho, por cima dos locais
     // mapa-múndi: luz (dia e noite), atmosfera e grade do modelo do mundo, por baixo de tudo
@@ -818,8 +818,8 @@ class AtlasUI {
     if (this.ctx) html.push(this.#ctxMenu(d));
 
     // cartão ao passar o mouse
-    if (this.hover && !this.drag) { const p = d.pois.map(normPoi).find(x => x.id === this.hover); if (p && (gm || p.state !== "oculto")) html.push(this.#hoverCard(p)); }
-    else if (this.hoverTip && !this.drag) { const t = this.hoverTip; html.push(`<div class="hovertip" style="left:${t.x}px;top:${t.y}px"><b>${esc(t.title)}</b>${t.sub ? `<small>${esc(t.sub)}</small>` : ""}</div>`); }
+    let hovP = null; if (this.hover && !this.drag) { const p = d.pois.map(normPoi).find(x => x.id === this.hover); if (p && (gm || p.state !== "oculto")) hovP = p; }
+    if (!hovP && this.hoverTip && !this.drag) { const t = this.hoverTip; html.push(`<div class="hovertip" style="left:${t.x}px;top:${t.y}px"><b>${esc(t.title)}</b>${t.sub ? `<small>${esc(t.sub)}</small>` : ""}</div>`); }
 
     // névoa: cor, opacidade ou uma imagem própria (um mapa sem detalhes); revelar e cobrir em ordem
     if (m.fog && L.fog) {
@@ -840,6 +840,7 @@ class AtlasUI {
 
     this.mapW = W; this.mapH = H;
     this.mapEl.innerHTML = `<div class="wlayer">${wl}</div><svg class="svg" width="${W}" height="${H}"><defs>${defs.join("")}</defs>${svg.join("")}</svg>${html.join("")}`;
+    this.#placeHover(hovP);
     // barra do céu no alto (mapas de região, cidade e local): sol, luas, cor do céu e as nuvens do clima daqui
     { const sb = this.#skyBar(sc, m, W, gm); if (sb != null) hud.push(`<div class="skybarwrap">${sb}</div>`); }
     if (this.skyOv) hud.push(this.#skyOverlay());
@@ -962,6 +963,15 @@ class AtlasUI {
     let s = null; try { s = poiSky(this.scene, p); } catch (e) { /* */ } if (!s) return "";
     return `<small class="hc-sky">${ic(s.immune ? "house" : CLIMATES[s.climate]?.icon ?? "cloud", 12)} ${esc(s.label)}</small>`;
   }
+  /** Cartão do local fica numa camada própria: só é refeito quando o conteúdo muda (a imagem não é recarregada a cada quadro). */
+  #placeHover(p) {
+    const el = this.hcEl; if (!el) return;
+    if (!p) { if (el.firstChild) el.innerHTML = ""; this.hcKey = null; return; }
+    let c; try { c = this.#hoverCard(p); } catch (e) { console.warn(`${MODULE_ID} | cartão`, e); return; }
+    let card = el.firstElementChild; const key = `${p.id}|${c.inner}`;
+    if (!card || this.hcKey !== key) { if (!card) { card = document.createElement("div"); el.appendChild(card); } card.innerHTML = c.inner; this.hcKey = key; }
+    const cls = `hovercard ${c.cls}`; if (card.className !== cls) card.className = cls; if (card.getAttribute("style") !== c.style) card.setAttribute("style", c.style);
+  }
   #hoverCard(p) {
     const k = POI_KINDS[p.kind]; const gm = this.gmView; const rumor = !gm && p.state === "rumor";
     const q = this.w2s(p.x, p.y); let t = ""; try { t = rumor ? "" : travelText(this, p.id); } catch (e) { /* */ }
@@ -971,7 +981,7 @@ class AtlasUI {
     const sz = Math.max(0.6, Math.min(1.8, Number(setting("cardSize", 1)) || 1)); const place = setting("cardPlace", "auto"); const estH = (img ? 190 : 100) * sz + 16;
     const top = rb ? rb.top : q.y - 14, bot = rb ? rb.bottom : q.y + 14; const cx = rb ? (rb.left + rb.right) / 2 : q.x;
     const down = place === "abaixo" || (place === "auto" && top - estH < 8);
-    return `<div class="hovercard ${img ? "hasimg" : ""} ${down ? "down" : "up"}" style="left:${cx}px;top:${down ? bot + 10 : top - 10}px;--hcs:${sz}">${img ? `<div class="hc-img" style="background-image:url('${esc(img)}')"></div>` : ""}<div class="hc-txt"><strong>${esc(rumor ? "Local desconhecido" : p.name)}</strong><span>${esc(rumor ? "Rumor" : k.label)} · ${esc(POI_STATES[p.state].label)}</span>${!rumor && (p.shop || p.service) ? `<span class="hc-biz">${ic("shop", 12)} ${p.shop && p.service ? "Loja e serviços" : p.shop ? "Loja" : "Serviços"}</span>` : ""}${t ? `<em>${esc(t)}</em>` : ""}${this.#skyLine(p, rumor)}</div></div>`;
+    return { cls: `${img ? "hasimg" : ""} ${down ? "down" : "up"}`, style: `left:${cx}px;top:${down ? bot + 10 : top - 10}px;--hcs:${sz}`, inner: `${img ? `<img class="hc-img" src="${esc(img)}" alt="" decoding="async">` : ""}<div class="hc-txt"><strong>${esc(rumor ? "Local desconhecido" : p.name)}</strong><span>${esc(rumor ? "Rumor" : k.label)} · ${esc(POI_STATES[p.state].label)}</span>${!rumor && (p.shop || p.service) ? `<span class="hc-biz">${ic("shop", 12)} ${p.shop && p.service ? "Loja e serviços" : p.shop ? "Loja" : "Serviços"}</span>` : ""}${t ? `<em>${esc(t)}</em>` : ""}${this.#skyLine(p, rumor)}</div>` };
   }
 
   #shape(s, cls, extra = "") {

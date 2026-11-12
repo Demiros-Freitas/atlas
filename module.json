@@ -2,7 +2,7 @@
   "id": "brumas-atlas",
   "title": "Demiros Tools - Atlas",
   "description": "Demiros Tools · Atlas: mapas interativos, com painel próprio à esquerda da tela: locais, rotas com bifurcações, grupos com personagens, veículos, tração e montarias (velocidade pelas fichas), destino escolhido em qualquer ponto do mapa com acordo dos jogadores e autorização do mestre, divisão de grupos, clima animado com rosa dos ventos, névoa de exploração e códice.",
-  "version": "1.48.1",
+  "version": "1.48.2",
   "authors": [
     {
       "name": "Demiros"
@@ -31,5 +31,5 @@
   },
   "url": "https://github.com/Demiros-Freitas/atlas",
   "manifest": "https://github.com/Demiros-Freitas/atlas/releases/latest/download/module.json",
-  "download": "https://github.com/Demiros-Freitas/atlas/releases/download/v1.48.1/atlas.zip"
+  "download": "https://github.com/Demiros-Freitas/atlas/releases/download/v1.48.2/atlas.zip"
 }
